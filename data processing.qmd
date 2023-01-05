@@ -1,0 +1,139 @@
+---
+title: "data processing"
+format: html
+editor: visual
+---
+
+Loading required libraries and data
+
+```{r}
+library(openxlsx)
+library(tidygeocoder)
+library(tidyverse)
+library(stringr)
+library(tidycensus)
+library(sf)
+library(dplyr)
+library(janitor)
+library(leaflet)
+library(htmlwidgets)
+
+#facilities data
+data <- read.xlsx("data/fivehills-countychildcarefacilities-sep2022.xlsx", fillMergedCells=TRUE)
+
+#geocoded addresses from texas a&m service
+coordinates <- read.csv("data/texasa&m-geocoordinates-nov2022.csv")
+
+#census data for population under age 5
+male <- get_acs(geography = "tract", variables = "B01001_003",
+                state = "MA", geometry = FALSE, year = 2020) 
+female <- get_acs(geography = "tract", variables = "B01001_027",
+                state = "MA", geometry = FALSE, year = 2020)
+
+#census tracts
+ma_tracts <- get_acs(state = "MA", geography = "tract",
+              variables = "B19013_001", geometry = TRUE)
+
+```
+
+Census data wrangling
+
+```{r}
+male_tbl <- as_tibble(male)
+female_tbl <- as_tibble(female)
+
+joined <- male_tbl %>%  #tibble at this point
+  full_join(y=female_tbl, by = c("GEOID", "NAME")) %>% 
+  mutate(pop = estimate.x + estimate.y) %>% 
+  filter(grepl('Hampden|Hampshire|Franklin', NAME)) %>% 
+  rename(tract = NAME)
+
+rm(male, female, male_tbl, female_tbl)
+```
+
+Coordinates Data Wrangling
+
+```{r}
+address_data <- data %>% 
+  add_column(State = "MA") %>% 
+  unite("address", c(Street.Address, City, State), remove=FALSE, sep= " ") %>% 
+  clean_names() %>% 
+  add_column(zip = NA) |>
+  mutate(id = row_number())
+
+coordinates <- coordinates %>% 
+  select(address, Latitude, Longitude) %>% 
+  rename(street_address = address) %>% 
+  clean_names() |>
+  mutate(id = row_number())
+
+facilities_data <- address_data %>% 
+  inner_join(coordinates, by="id")
+
+#identify names of the facilities
+facilities_data <- facilities_data %>%
+  unite("provider", c(first_name, last_name), remove=FALSE, sep= " ") %>% 
+  mutate(name = case_when(!is.na(business_name) ~ business_name,
+                          is.na(business_name) ~ provider))
+
+facilities_data$name = str_to_title(facilities_data$name)
+
+facilities_no_na <- facilities_data %>% 
+  filter(!is.na(latitude))
+
+rm(data, address_data, coordinates, facilities_data)
+
+```
+
+Tract Data Wrangling
+
+```{r}
+#convert data frame to sf and set crs to same as census
+facilities_sf <- facilities_no_na %>% 
+  st_as_sf(coords = c("longitude", "latitude"),
+           crs = st_crs(4269))
+
+#filter for franklin, hampden, hampshire counties
+ma_tracts <- ma_tracts %>% 
+  filter(grepl('Franklin|Hampden|Hampshire', NAME))
+
+facilities_tracts <- st_join(facilities_sf, ma_tracts, join = st_intersects)
+
+rm(facilities_no_na, facilities_sf)
+
+```
+
+Calculating children per licensed childcare slot per tract
+
+```{r}
+#total childcare slots per tract
+facilities_tracts <- facilities_tracts %>% 
+  rename(tract = NAME) %>% 
+  clean_names() %>% 
+  group_by(tract) %>% 
+  mutate(childcare_slots_per_tract = sum(total_licensed_capacity))
+
+#join census data to facilities data
+childcare_census <- facilities_tracts %>% 
+  inner_join(joined, by = "tract")
+
+#rename variable
+childcare_census <- childcare_census %>% 
+  rename(child_pop = pop) %>% 
+  select(-c(variable, estimate, moe, variable.x, estimate.x, moe.x, variable.y, estimate.y, moe.y))
+
+#calculate new variable
+childcare_census <- childcare_census %>% 
+  mutate(children_per_slot = child_pop/childcare_slots_per_tract) %>% 
+  mutate(desert = case_when(children_per_slot >= 3 ~ "desert",
+                          children_per_slot < 3 ~ "not desert")) %>%
+  select(-geoid)
+```
+
+Write files
+
+```{r}
+#commented below because they've already been added to your environment
+#st_write(childcare_census, "data/childcare_census.gpkg")
+#st_write(ma_tracts, "data/ma_tracts.gpkg")
+```

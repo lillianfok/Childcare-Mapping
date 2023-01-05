@@ -1,0 +1,121 @@
+---
+title: "sprint2_michel"
+author: "Michel Ruiz-Fuentes"
+date: "2022-10-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+[tigris: An R Package to Access and Work with Geographic Data from the US Census Bureau](https://journal.r-project.org/archive/2016-2/walker.pdf) 
+
+[How to use strsplit() function in R?](https://www.digitalocean.com/community/tutorials/strsplit-function-in-r) 
+
+[Split large R Dataframe into list of smaller Dataframes](https://www.geeksforgeeks.org/split-large-r-dataframe-into-list-of-smaller-dataframes/) 
+
+```{r, SPRINT 2 loading the packages, message=FALSE}
+library(dplyr, warn.conflicts = FALSE)
+library(tidycensus)
+library(tidyverse)
+library(tidygeocoder)
+library(tigris)
+```
+
+```{r, SPRINT 2}
+#loading coordinates dataframe
+coords_data <- read.csv("coords.csv")
+
+#loading facilities dataframe
+facilities_data <- read.csv("facilities.csv")
+view(facilities_data)
+
+#loading general MA map with tracts and coordiantes (however coordinates as a list)
+ma_tracts <- tracts(state = "MA", cb= TRUE)
+view(ma_tracts)
+```
+
+
+```{r, SPRINT 2}
+#locating tracts for Hampshire county (COUNTYFP = 015)
+ma_tracts_hampshire <- tracts(state = "MA", cb= TRUE,county = 015, year = 2020)
+view(ma_tracts_hampshire)
+
+#locating tracts for Hampden county (COUNTYFP = 013)
+ma_tracts_hampden <- tracts(state = "MA", cb= TRUE,county = 013, year = 2020)
+view(ma_tracts_hampden)
+
+#locating tracts for Franklin county (COUNTYFP = 011)
+ma_tracts_franklin <- tracts(state = "MA", cb= TRUE,county = 011, year = 2020)
+view(ma_tracts_franklin)
+```
+
+
+```{sorting childcare populations to individual tracts}
+census_api_key("", install = TRUE)
+```
+
+
+```{rload acs data}
+
+```
+
+
+```{r, SPRINT 1 Geocoding addresses using the coordinators}
+# create a dataframe with addresses
+# i manually added the city and state, but i will find a code to concatenate the addresses
+
+some_addresses <- tibble::tribble(
+~name,                  ~addr,
+"ASHFIELD COMMUNITY PRESCHOOL",          "103 BAPTIST CORNER RD ASHFIELD MA ",
+"The Country Toddler's Daycare", "376 Legate Hill Road Charlemont MA",     
+"LITTLE SQUIRTS HOME DAYCARE",         "183 S SHIRKSHIRE RD Conway MA"                                  
+)
+
+lat_longs <- some_addresses %>%
+  geocode(addr, method = 'osm', lat = latitude , long = longitude)
+lat_longs
+
+class(lat_longs)
+
+```
+
+
+```{r, SPRINT 1 concatenating two columns in R}
+
+df1 = data.frame(State = c('Arizona','Georgia','Newyork','Indiana','Florida'), 
+                 State_code = c('AZ','GG','NY','IN','FL'), 
+                 Score=c(62,47,55,74,31))
+df1
+
+df1$state_and_code = paste(df1$State,df1$State_code)
+df1
+
+class(df1)
+```
+
+
+```{r, SPRINT 1}
+
+df1 = data.frame(State = c('Arizona','Georgia','Newyork','Indiana','Florida'), 
+                 State_code = c('AZ','GG','NY','IN','FL'), 
+                 Score=c(62,47,55,74,31))
+
+df1
+
+paste(Franklin_Hampshire_Hampden_County_data$Street Address, Franklin_Hampshire_Hampden_County_data$City, sep=" ")
+```
+
+
+[geocoding](https://cran.r-project.org/web/packages/tidygeocoder/vignettes/tidygeocoder.html)
+
+[tidygeocoder-github](https://jessecambon.github.io/tidygeocoder/)
+
+[tidygeocoder-rdocumentation](https://www.rdocumentation.org/packages/tidygeocoder/versions/0.2.5)
+
+[Concatenate Two Columns of a Dataframe in R](https://www.datasciencemadesimple.com/concatenate-two-columns-of-dataframe-in-r-2/)
+
+[How to Split Text Strings in Displayr Using R](https://help.displayr.com/hc/en-us/articles/360004086176-How-to-Split-Text-Strings-in-Displayr-Using-R)

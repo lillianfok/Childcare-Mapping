@@ -1,0 +1,150 @@
+---
+title: "Sprint 2 Lillian"
+format: html
+editor: visual
+---
+
+```{r}
+#library(openxlsx)
+
+# Loads xlsx file into var data
+#data <- read.xlsx("Franklin, Hampshire, Hampden County data.xlsx", fillMergedCells=TRUE)
+
+#USE THIS to load coordinates dataframe
+#coords_data <- load("coords.csv")
+
+```
+
+```{r}
+#all needed packages
+library(tidygeocoder)
+library(tidyverse)
+library(stringr)
+library(tidycensus)
+library(sf)
+library(dplyr)
+library(janitor)
+
+#USE THIS to load facilities dataframe
+facilities_data <- read.csv("data/facilities.csv")
+
+#USE THIS to load joined tracts and facilities sf
+#saveRDS(facilities_tracts, file = "facilities_tracts.rds")
+#facilities_tracts <- readRDS("facilities_tracts.rds")
+
+```
+
+DON'T RUN
+
+```{r}
+library(tidygeocoder)
+library(tidyverse)
+library(stringr)
+
+#adding state column
+data <- data %>% 
+  add_column(State = "MA")
+
+#creating concat address column
+address_data <- data %>%
+  unite("address", c(Street.Address, City, State), remove=FALSE, sep= " ") %>% 
+  clean_names() %>% 
+  add_column(zip = NA)
+
+#save for Texas A&M
+#write.csv(address_data, "addresses.csv")
+
+#geocoding coordinates
+facilities_data <- address_data %>%
+  geocode(address, method = 'osm', lat = latitude , long = longitude)
+#crs 4326
+###census uses crs 4269
+
+```
+
+DON'T RUN
+
+```{r}
+#subsets by unique address values
+facilities_data <- distinct(coords_data, address, .keep_all = TRUE)
+
+#concat the provider names
+#create name variable using business name where it exists and provider name where it doesn't
+facilities_data <- facilities_data %>%
+  unite("provider", c(First.Name, Last.Name), remove=FALSE, sep= " ") %>% 
+  mutate(name = case_when(!is.na(Business.Name) ~ Business.Name,
+                          is.na(Business.Name) ~ provider))
+
+#str to title
+facilities_data$name = str_to_title(facilities_data$name)
+
+
+write.csv(facilities_data,'facilities.csv')
+
+```
+
+assigning tracts to facilities addresses RUN THIS
+
+```{r}
+
+#get tracts from census
+ma_tracts <- tidycensus::get_acs(state = "MA", geography = "tract",
+              variables = "B19013_001", geometry = TRUE)
+
+#filter for franklin, hampden, hampshire counties
+ma_tracts <- ma_tracts %>% 
+  filter(grepl('Franklin|Hampden|Hampshire', NAME))
+
+#remove NAs for sake of conversion
+#we don't want to do this to our final dataframe
+facilities_no_na <- facilities_data %>% 
+  filter(!is.na(latitude))
+
+#convert data frame to sf and set crs to same as census
+facilities_sf <- facilities_no_na %>% 
+  st_as_sf(coords = c("longitude", "latitude"),
+           crs = st_crs(4269))
+
+facilities_tracts <- st_join(facilities_sf, ma_tracts, join = st_intersects) 
+
+#for sanity checking
+mapview::mapview(ma_tracts) + mapview::mapview(facilities_tracts)
+
+```
+
+with facilities_tracts loaded, start here calculate total childcare slots per tract
+
+```{r}
+facilities_tracts <- facilities_tracts %>% 
+  rename(tract = NAME)
+view(facilities_tracts)
+
+#create childcare slots column
+facilities_tracts <- facilities_tracts %>% 
+  group_by(tract) %>% 
+  mutate(childcare_slots_per_tract = sum(Total.Licensed.Capacity)) 
+
+
+```
+
+load census data and calculate children per slot per tract
+
+```{r}
+#join census data to facilities data
+childcare_census <- facilities_tracts %>% 
+  inner_join(joined, by = "tract")
+
+#rename variable
+childcare_census <- childcare_census %>% 
+  rename(child_pop = pop)
+
+#remove extra columns? what are these from
+childcare_census <- childcare_census %>% 
+  select(-c(X.1, X.2, X.3, X.4, X.5, X.6, X.7, X.8, X.9, X.10, X.11))
+
+#calculate new variable
+childcare_census <- childcare_census %>% 
+  mutate(children_per_slot = child_pop/childcare_slots_per_tract) %>% 
+  clean_names()
+
+```

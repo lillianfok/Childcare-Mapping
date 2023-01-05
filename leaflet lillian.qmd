@@ -1,0 +1,123 @@
+---
+title: "leaflet mapping"
+format: html
+editor: visual
+---
+
+```{r}
+library(leaflet)
+library(sf)
+library(tidyverse)
+library(RColorBrewer)
+```
+
+```{r}
+childcare_census <- st_read("data/childcare_census.gpkg")
+ma_tracts <- st_read("data/ma_tracts.gpkg")
+```
+
+##Set up base map
+
+```{r}
+pioneer_valley_map <- leaflet(width = "100%") %>%
+  setView(lat = 42.2914, lng = -72.5967, zoom = 9) %>%
+  addProviderTiles(providers$Stamen.Toner)
+```
+
+##Add layer
+
+```{r}
+#base map uses crs4326
+st_transform(childcare_census, crs = 4326)
+
+desert_binary <- childcare_census %>% 
+  select(GEOID, desert, children_per_slot, tract) %>% 
+  st_drop_geometry() %>% 
+  distinct()
+  
+#join ma tracts to binary indicator
+desert_map <- ma_tracts %>% 
+  left_join(desert_binary, by = "GEOID") %>% 
+  st_transform(crs = 4326)
+
+#set binary color palette
+pal <- colorFactor(palette = c("#800020", "#FCD299"), domain = desert_map$desert)
+
+#get polygon sf of tracts
+pioneer_valley_map %>% 
+  addPolygons(data = desert_map, 
+              weight = 0.5, 
+              fillColor = ~pal(desert_map$desert), 
+              fillOpacity = 0.6, 
+              #label = ~tract) %>% 
+              label = ~children_per_slot) %>% 
+  addCircleMarkers(data = childcare_census,
+                   radius = 2,
+                   weight = 1,
+                   color = "black",
+                   label = ~provider) %>%
+  addLegend("bottomright", 
+            pal = pal,
+            values = desert_map$desert,
+            title = "Designation",
+            opacity = 1)
+
+#assign desert to NA values
+```
+
+Choropleth Map: 
+
+```{r, lab 9 choropleth map, fill based on children_per_childcare_slot}
+
+# initializing map of Massachussetts
+western_mass <- 
+  leaflet(width = "100%") %>% 
+  setView(lat = 42.2914, lng = -72.5967, zoom = 9) %>%
+  addProviderTiles(providers$CartoDB.Positron) 
+
+#set geometry and transform data CRS
+st_transform(childcare_census, crs = 4326)
+
+#selecting variables 
+children_per_slot_map <- childcare_census %>% 
+  select(GEOID, tract, children_per_slot) %>%
+  distinct() %>%
+  st_drop_geometry()
+
+#join tracts 
+children_per_slot_ma_map <- ma_tracts %>% 
+  inner_join(children_per_slot_map, by = "GEOID") %>% 
+  st_transform(crs = 4326)
+
+#color palette
+qpal <- colorBin("YlOrRd", children_per_slot_map$children_per_slot, 3)
+
+#children_per_slot visualization 
+
+labels <- sprintf(
+  "<strong>%s</strong><br/> children per slot in %s", childcare_census$children_per_slot, childcare_census$tract) %>% 
+  lapply(htmltools::HTML)
+
+map <-   
+  western_mass %>% 
+  addPolygons (data = children_per_slot_ma_map, 
+      weight = 1, 
+      color = "black",
+      fillColor = ~qpal(children_per_slot),
+      fillOpacity = 0.4, 
+      group = "Childcare Per Childcare Slot", 
+      options = pathOptions(),
+      label = labels,
+      highlightOptions = highlightOptions(
+      weight = 5,
+      color = "#ffffff",
+      fillOpacity = 0.8,
+      bringToFront = TRUE)) %>% 
+  addLegend ("bottomright", 
+      pal = qpal, 
+      values = as.double(children_per_slot_ma_map$children_per_slot),
+      title = "Children Per Slot",
+      opacity = 1)
+
+map
+```
