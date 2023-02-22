@@ -136,4 +136,5 @@ Write files
 #commented below because they've already been added to your environment
 #st_write(childcare_census, "data/childcare_census.gpkg")
 #st_write(ma_tracts, "data/ma_tracts.gpkg")
+#st_write(joined, "data/children_tracts.gpkg")
 ```
